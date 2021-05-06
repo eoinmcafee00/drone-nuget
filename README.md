@@ -46,7 +46,8 @@ steps:
     pull: if-not-exists
     settings:
       log_level: debug
-      nuget_apikey: "someKey"
+      nuget_apikey:
+        from_secret: nuget_apikey
       nuget_uri: "https://api.nuget.org/v3/index.json"
       package_location: "SomePackageLocation"
 ```

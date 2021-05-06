@@ -6,7 +6,7 @@ package plugin
 
 import (
 	"context"
-	"errors"
+	"fmt"
 	"github.com/sirupsen/logrus"
 	"os"
 	"os/exec"
@@ -27,7 +27,7 @@ type Args struct {
 
 const globalNugetUri = "https://api.nuget.org/v3/index.json"
 
-func FileExists(name string) bool {
+func fileExists(name string) bool {
 	if _, err := os.Stat(name); err != nil {
 		if os.IsNotExist(err) {
 			return false
@@ -36,24 +36,24 @@ func FileExists(name string) bool {
 	return true
 }
 
-func ValidateAndSetArgs(args Args) (validatedArgs Args, err error) {
+func validateAndSetArgs(args *Args) error {
 	if args.ApiKey == ""{
-		err = errors.New("nuget api key must be set in settings")
+		return fmt.Errorf ("nuget api key must be set in settings")
 	}
 	if args.NugetUri == "" {
 		args.NugetUri = globalNugetUri
 	}
-	if args.PackageLocation != "" && !FileExists(args.PackageLocation){
-		err = errors.New("the package location: " + args.PackageLocation + " does not exist")
+	if args.PackageLocation != "" && !fileExists(args.PackageLocation){
+		return fmt.Errorf ("the package location: %s does not exist", args.PackageLocation)
 	}
-	validatedArgs = args
-	return args, err
+	return nil
 }
 
-func WalkPath(files *[]string) filepath.WalkFunc {
+func walkPath(files *[]string) filepath.WalkFunc {
 	return func(path string, info os.FileInfo, err error) error {
 		if err != nil {
-			logrus.Fatal(err)
+			logrus.Errorln(err)
+			return nil
 		}
 		if filepath.Ext(path) == ".nupkg" {
 			*files = append(*files, path)
@@ -62,43 +62,45 @@ func WalkPath(files *[]string) filepath.WalkFunc {
 	}
 }
 
-func PushToNuget(file string, args Args) *exec.Cmd {
-	cmd := exec.Command("dotnet", "nuget", "push", file, "--api-key", args.ApiKey, "--source", args.NugetUri, "--skip-duplicate")
-	return cmd
+func pushToNuget(file string, args Args) *exec.Cmd {
+	return exec.Command("dotnet", "nuget", "push", file, "--api-key", args.ApiKey, "--source", args.NugetUri, "--skip-duplicate")
 }
 
-func Exec(ctx context.Context, args Args) error {
-	logrus.Debugln("Starting ...")
+func Exec(_ context.Context, args Args) error {
+	logrus.Debug("Starting ...")
 
-	args, err := ValidateAndSetArgs(args)
+	err := validateAndSetArgs(&args)
 	if err != nil {
-		logrus.Errorln("Issues with the parameters passed: ")
-		return err
+		return fmt.Errorf("issues with the parameters passed: %w", err)
 	}
 
 	var files []string
 	// checks if single package location was provided, if not push all.
 	if args.PackageLocation == ""{
-		root := "/drone/src"
-		err = filepath.Walk(root, WalkPath(&files))
+		err = filepath.Walk(".", walkPath(&files))
 		if err != nil {
 			logrus.Errorln(err)
+			return err
 		}
 	} else {
 		files = append(files, args.PackageLocation)
 	}
 
+	if len(files) == 0{
+		logrus.Debugln("No packages to publish ...")
+		return nil
+	}
+
 	for _, file := range files {
 		if file != "" {
-			logrus.Debugln("Pushing package: " +  file)
-			cmd := PushToNuget(file, args)
+			logrus.Debugf("Pushing package: %s ", file)
+			cmd := pushToNuget(file, args)
 			output, err := cmd.Output()
 			if err != nil {
 				logrus.Errorln(string(output))
 				return err
 			}
-		} else {
-			logrus.Debugln("No packages to publish ...")
+			logrus.Infof(string(output))
 		}
 	}
 	logrus.Debugln("Finished ...")
