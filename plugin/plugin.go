@@ -4,7 +4,14 @@
 
 package plugin
 
-import "context"
+import (
+	"context"
+	"fmt"
+	"github.com/sirupsen/logrus"
+	"os"
+	"os/exec"
+	"path/filepath"
+)
 
 // Args provides plugin execution arguments.
 type Args struct {
@@ -13,13 +20,89 @@ type Args struct {
 	// Level defines the plugin log level.
 	Level string `envconfig:"PLUGIN_LOG_LEVEL"`
 
-	// TODO replace or remove
-	Param1 string `envconfig:"PLUGIN_PARAM1"`
-	Param2 string `envconfig:"PLUGIN_PARAM2"`
+	ApiKey string `envconfig:"PLUGIN_NUGET_APIKEY"`
+	NugetUri string `envconfig:"PLUGIN_NUGET_URI"`
+	PackageLocation string `envconfig:"PLUGIN_PACKAGE_LOCATION"`
 }
 
-// Exec executes the plugin.
-func Exec(ctx context.Context, args Args) error {
-	// write code here
+const globalNugetUri = "https://api.nuget.org/v3/index.json"
+
+func fileExists(name string) bool {
+	if _, err := os.Stat(name); err != nil {
+		if os.IsNotExist(err) {
+			return false
+		}
+	}
+	return true
+}
+
+func validateAndSetArgs(args *Args) error {
+	if args.ApiKey == ""{
+		return fmt.Errorf ("nuget api key must be set in settings")
+	}
+	if args.NugetUri == "" {
+		args.NugetUri = globalNugetUri
+	}
+	if args.PackageLocation != "" && !fileExists(args.PackageLocation){
+		return fmt.Errorf ("the package location: %s does not exist", args.PackageLocation)
+	}
+	return nil
+}
+
+func walkPath(files *[]string) filepath.WalkFunc {
+	return func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			logrus.Errorln(err)
+			return nil
+		}
+		if filepath.Ext(path) == ".nupkg" {
+			*files = append(*files, path)
+		}
+		return nil
+	}
+}
+
+func pushToNuget(file string, args Args) *exec.Cmd {
+	return exec.Command("dotnet", "nuget", "push", file, "--api-key", args.ApiKey, "--source", args.NugetUri, "--skip-duplicate")
+}
+
+func Exec(_ context.Context, args Args) error {
+	logrus.Debug("Starting ...")
+
+	err := validateAndSetArgs(&args)
+	if err != nil {
+		return fmt.Errorf("issues with the parameters passed: %w", err)
+	}
+
+	var files []string
+	// checks if single package location was provided, if not push all.
+	if args.PackageLocation == ""{
+		err = filepath.Walk(".", walkPath(&files))
+		if err != nil {
+			logrus.Errorln(err)
+			return err
+		}
+	} else {
+		files = append(files, args.PackageLocation)
+	}
+
+	if len(files) == 0{
+		logrus.Errorln("No packages to publish ...")
+		return nil
+	}
+
+	for _, file := range files {
+		if file != "" {
+			logrus.Debugf("Pushing package: %s ", file)
+			cmd := pushToNuget(file, args)
+			output, err := cmd.Output()
+			if err != nil {
+				logrus.Errorln(string(output))
+				return err
+			}
+			logrus.Infof(string(output))
+		}
+	}
+	logrus.Debugln("Finished ...")
 	return nil
 }

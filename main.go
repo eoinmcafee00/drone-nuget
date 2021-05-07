@@ -6,15 +6,21 @@ package main
 
 import (
 	"context"
-
-	"github.com/owner/name/plugin"
-
+	"github.com/drone/drone-nuget/plugin"
+	"github.com/joho/godotenv"
 	"github.com/kelseyhightower/envconfig"
 	"github.com/sirupsen/logrus"
 )
 
 func main() {
 	logrus.SetFormatter(new(formatter))
+
+	// load env variables
+	err := godotenv.Load(".env")
+
+	if err != nil {
+		logrus.Debugln("Error loading .env file")
+	}
 
 	var args plugin.Args
 	if err := envconfig.Process("", &args); err != nil {
