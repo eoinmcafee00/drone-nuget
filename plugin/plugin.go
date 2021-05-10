@@ -97,8 +97,7 @@ func Exec(_ context.Context, args Args) error {
 			cmd := pushToNuget(file, args)
 			output, err := cmd.Output()
 			if err != nil {
-				logrus.Errorln(string(output))
-				return err
+				return fmt.Errorf(string(output))
 			}
 			logrus.Infof(string(output))
 		}
