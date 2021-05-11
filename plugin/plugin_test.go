@@ -5,8 +5,9 @@
 package plugin
 
 import (
-	"github.com/stretchr/testify/assert"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func TestValidateArgs(t *testing.T) {
@@ -22,7 +23,7 @@ func TestValidationArgsPackageLocation(t *testing.T) {
 	packageExists := Args{ApiKey: "someKey", PackageLocation: "testdata"}
 	noPackage := Args{ApiKey: "someKey", PackageLocation: "/notExist"}
 
- 	// assert equality
+	// assert equality
 	assert.Nil(t, validateAndSetArgs(&packageExists))
 	assert.Error(t, validateAndSetArgs(&noPackage))
 }
