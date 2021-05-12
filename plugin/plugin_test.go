@@ -16,7 +16,7 @@ func TestValidateArgs(t *testing.T) {
 
 	// assert equality
 	assert.Nil(t, validateAndSetArgs(&keyExists), "result is nil")
-	assert.NotNil(t, noKey, "result is an error")
+	assert.NotNil(t, noKey)
 }
 
 func TestValidationArgsPackageLocation(t *testing.T) {
